@@ -1,0 +1,71 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# ========================
+# Virtual Environments
+# ========================
+.venv/
+venv/
+ENV/
+env/
+
+# ========================
+# Data (large files)
+# ========================
+data/raw/*.csv
+data/processed/*.csv
+
+# ========================
+# Models (large files — use Git LFS or DVC)
+# ========================
+models/*.h5
+models/*.pkl
+models/*.joblib
+
+# ========================
+# Jupyter Notebook
+# ========================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ========================
+# IDE
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+*.tmp
+
+# ========================
+# Environment Variables
+# ========================
+.env
+.env.local
+
+# ========================
+# Docker
+# ========================
+.dist/
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/

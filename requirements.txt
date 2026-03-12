@@ -1,0 +1,33 @@
+# Stock Market Prediction System — Dependencies
+# Install: pip install -r requirements.txt
+
+# Data
+yfinance>=0.2.31
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+
+# Deep Learning
+tensorflow>=2.15.0
+
+# Technical Analysis
+ta>=0.11.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.18.0
+
+# Backend API
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Frontend Dashboard
+streamlit>=1.28.0
+
+# Utilities
+joblib>=1.3.0
+requests>=2.31.0
+pyyaml>=6.0.0

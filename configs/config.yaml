@@ -1,0 +1,94 @@
+# ================================================================
+# Stock Market Prediction System — Configuration
+# ================================================================
+
+# Data settings
+data:
+  ticker: "AAPL"
+  start_date: "2018-01-01"
+  end_date: "2026-03-01"
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+
+# Model settings
+model:
+  window_size: 60
+  train_split: 0.8
+  random_seed: 42
+
+# LSTM hyperparameters
+lstm:
+  layers:
+    - units: 128
+      return_sequences: true
+      dropout: 0.2
+    - units: 64
+      return_sequences: true
+      dropout: 0.2
+    - units: 32
+      return_sequences: false
+      dropout: 0.2
+  optimizer:
+    name: "adam"
+    learning_rate: 0.001
+  loss: "mean_squared_error"
+  epochs: 50
+  batch_size: 32
+
+# Callbacks
+callbacks:
+  early_stopping:
+    monitor: "val_loss"
+    patience: 10
+    restore_best_weights: true
+  reduce_lr:
+    monitor: "val_loss"
+    factor: 0.5
+    patience: 5
+    min_lr: 0.000001
+
+# Traditional ML models
+random_forest:
+  n_estimators: 100
+  max_depth: 20
+  min_samples_split: 5
+
+svr:
+  kernel: "rbf"
+  C: 100
+  epsilon: 0.01
+  gamma: "scale"
+
+# Feature engineering
+features:
+  sma_windows: [20, 50, 200]
+  ema_spans: [12, 26]
+  rsi_period: 14
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+  bollinger:
+    window: 20
+    std_dev: 2
+  momentum_windows: [10, 30]
+  volatility_window: 20
+
+# Saved model paths
+paths:
+  lstm_model: "models/lstm_model.h5"
+  scaler: "models/scaler.pkl"
+  random_forest: "models/random_forest.pkl"
+  svr: "models/svr_model.pkl"
+  metrics: "models/metrics.json"
+
+# API settings
+api:
+  host: "0.0.0.0"
+  port: 8000
+  max_forecast_days: 30
+
+# Frontend settings
+frontend:
+  port: 8501
+  cache_ttl: 300  # seconds
