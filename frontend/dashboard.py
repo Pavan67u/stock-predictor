@@ -22,6 +22,9 @@ from components.charts import (
 )
 from components.sidebar import render_sidebar
 
+
+USER_ID = "demo"
+
 # ---- Page Configuration ----
 st.set_page_config(
     page_title="StockVision AI — ML Predictions",
@@ -38,6 +41,16 @@ if "page" not in st.session_state:
     st.session_state.page = "start"
 if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = "AAPL"
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = ["AAPL", "MSFT", "GOOGL"]
+if "alerts" not in st.session_state:
+    st.session_state.alerts = []
+if "state_synced" not in st.session_state:
+    st.session_state.state_synced = False
+if "auth_token" not in st.session_state:
+    st.session_state.auth_token = ""
+if "auth_user" not in st.session_state:
+    st.session_state.auth_user = ""
 
 
 # ---- Shared Utility ----
@@ -49,6 +62,63 @@ def load_data(ticker: str, period: str) -> pd.DataFrame:
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
     return data
+
+
+def api_get(path: str, timeout: int = 20):
+    """Backend GET helper with safe error handling."""
+    try:
+        headers = {}
+        if st.session_state.auth_token:
+            headers["Authorization"] = f"Bearer {st.session_state.auth_token}"
+        resp = requests.get(f"http://localhost:8000{path}", timeout=timeout, headers=headers)
+        if resp.status_code == 200:
+            return resp.json(), None
+        return None, f"API error {resp.status_code}: {resp.text[:120]}"
+    except Exception as e:
+        return None, str(e)
+
+
+def api_post(path: str, payload: dict, timeout: int = 20):
+    """Backend POST helper with safe error handling."""
+    try:
+        headers = {}
+        if st.session_state.auth_token:
+            headers["Authorization"] = f"Bearer {st.session_state.auth_token}"
+        resp = requests.post(f"http://localhost:8000{path}", json=payload, timeout=timeout, headers=headers)
+        if resp.status_code == 200:
+            return resp.json(), None
+        return None, f"API error {resp.status_code}: {resp.text[:120]}"
+    except Exception as e:
+        return None, str(e)
+
+
+def api_delete(path: str, timeout: int = 20):
+    """Backend DELETE helper with safe error handling."""
+    try:
+        headers = {}
+        if st.session_state.auth_token:
+            headers["Authorization"] = f"Bearer {st.session_state.auth_token}"
+        resp = requests.delete(f"http://localhost:8000{path}", timeout=timeout, headers=headers)
+        if resp.status_code == 200:
+            return resp.json(), None
+        return None, f"API error {resp.status_code}: {resp.text[:120]}"
+    except Exception as e:
+        return None, str(e)
+
+
+def sync_user_state() -> None:
+    """Load persistent watchlist and alerts from backend once per session."""
+    if st.session_state.state_synced:
+        return
+    active_user = st.session_state.auth_user or USER_ID
+    wl_data, _ = api_get(f"/api/user/watchlist?user_id={active_user}")
+    al_data, _ = api_get(f"/api/user/alerts?user_id={active_user}")
+
+    if wl_data and "watchlist" in wl_data:
+        st.session_state.watchlist = [w["ticker"] for w in wl_data["watchlist"]]
+    if al_data and "alerts" in al_data:
+        st.session_state.alerts = al_data["alerts"]
+    st.session_state.state_synced = True
 
 
 # ================================================================
@@ -90,6 +160,31 @@ def render_start_page():
     # ---- Search Input (Streamlit widgets — must be separate) ----
     spacer_l, center_col, spacer_r = st.columns([1, 2, 1])
     with center_col:
+        st.markdown("### Account Access")
+        if not st.session_state.auth_token:
+            auth_mode = st.radio("Access Mode", ["Login", "Register"], horizontal=True)
+            auth_user = st.text_input("Username", value="", key="auth_user_input").strip().lower()
+            auth_pass = st.text_input("Password", value="", type="password", key="auth_pass_input")
+            if st.button("Continue", key="auth_submit_btn"):
+                endpoint = "/api/auth/login" if auth_mode == "Login" else "/api/auth/register"
+                auth_data, auth_err = api_post(endpoint, {"username": auth_user, "password": auth_pass})
+                if auth_data and auth_data.get("token"):
+                    st.session_state.auth_token = auth_data["token"]
+                    st.session_state.auth_user = auth_data["username"]
+                    st.session_state.state_synced = False
+                    st.success(f"Authenticated as {auth_data['username']}")
+                    st.rerun()
+                else:
+                    st.error(f"Authentication failed: {auth_err or 'Unknown error'}")
+            st.stop()
+        else:
+            st.success(f"Signed in as {st.session_state.auth_user}")
+            if st.button("Sign Out", key="signout_btn"):
+                st.session_state.auth_token = ""
+                st.session_state.auth_user = ""
+                st.session_state.state_synced = False
+                st.rerun()
+
         raw_input = st.text_input(
             "Enter Stock Ticker",
             value=st.session_state.selected_ticker,
@@ -170,6 +265,8 @@ def render_start_page():
 # ================================================================
 def render_dashboard():
     """Render the main analytics dashboard."""
+
+    sync_user_state()
 
     # Show sidebar on dashboard page
     st.markdown("""
@@ -345,10 +442,13 @@ def render_dashboard():
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
 
     # ===== TABBED CONTENT =====
-    tab_chart, tab_prediction, tab_indicators = st.tabs([
+    tab_chart, tab_prediction, tab_indicators, tab_trading, tab_compare, tab_market = st.tabs([
         "📈  Price Chart",
         "🔮  AI Prediction",
         "📊  Technical Analysis",
+        "🧭  Trading Analysis",
+        "⚖️  Compare Stocks",
+        "🌐  Market Overview",
     ])
 
     # ===== TAB 1: PRICE CHART =====
@@ -653,6 +753,280 @@ def render_dashboard():
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+    # ===== TAB 4: TRADING ANALYSIS =====
+    with tab_trading:
+        st.markdown("""
+        <div class="section-header">
+            <div class="icon">🧭</div>
+            <h3>Professional Trading Analysis</h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+        left, right = st.columns([2, 1])
+
+        with left:
+            mtf_data, mtf_err = api_get(f"/api/analysis/multi-timeframe/{ticker}")
+            if mtf_data:
+                rows = []
+                for tf, vals in mtf_data["timeframes"].items():
+                    rows.append(
+                        {
+                            "Timeframe": tf,
+                            "Bias": vals["bias"],
+                            "Signal": vals["signal"],
+                            "RSI": vals["rsi"],
+                            "Price": vals["price"],
+                        }
+                    )
+                st.markdown("#### Multi-timeframe Matrix")
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                st.info(f"Consensus Signal: **{mtf_data['consensus']}**")
+            else:
+                st.warning(f"Multi-timeframe analysis unavailable: {mtf_err}")
+
+            structure_data, structure_err = api_get(f"/api/analysis/structure/{ticker}")
+            if structure_data:
+                st.markdown("#### Market Structure")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Support", f"${structure_data['support']:.2f}")
+                c2.metric("Current", f"${structure_data['current_price']:.2f}")
+                c3.metric("Resistance", f"${structure_data['resistance']:.2f}")
+                st.caption(f"Structure State: **{structure_data['structure'].upper()}**")
+            else:
+                st.warning(f"Structure analysis unavailable: {structure_err}")
+
+            st.markdown("#### Trade Plan & Position Sizing")
+            account_col, risk_col = st.columns(2)
+            account_size = account_col.number_input("Account Size ($)", min_value=1000.0, value=10000.0, step=500.0)
+            risk_pct = risk_col.slider("Risk per Trade (%)", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
+            if st.button("Generate Trade Plan", key="trade_plan_btn"):
+                plan_data, plan_err = api_post(
+                    "/api/analysis/plan",
+                    {
+                        "ticker": ticker,
+                        "account_size": account_size,
+                        "risk_percent": risk_pct,
+                        "stop_loss_atr_multiplier": 1.5,
+                    },
+                )
+                if plan_data:
+                    p1, p2, p3, p4 = st.columns(4)
+                    p1.metric("Direction", plan_data["direction"].upper())
+                    p2.metric("Entry", f"${plan_data['entry']:.2f}")
+                    p3.metric("Stop Loss", f"${plan_data['stop_loss']:.2f}")
+                    p4.metric("R:R", f"{plan_data['risk_reward_ratio']:.2f}")
+                    st.success(
+                        f"TP1 ${plan_data['take_profit_1']:.2f} | TP2 ${plan_data['take_profit_2']:.2f} | "
+                        f"Size: {plan_data['position_size_shares']} shares"
+                    )
+                else:
+                    st.error(f"Trade plan unavailable: {plan_err}")
+
+        with right:
+            con_data, con_err = api_get(f"/api/analysis/confluence/{ticker}")
+            if con_data:
+                score = con_data["confluence"]["score"]
+                grade = con_data["confluence"]["grade"]
+                st.markdown("#### Confluence Score")
+                st.metric("Setup Score", f"{score}/100", f"Grade {grade}")
+                st.write(
+                    {
+                        "Signal": con_data["signal"],
+                        "Trend": con_data["trend_bias"],
+                        "RSI": con_data["rsi"],
+                        "MACD": con_data["macd"],
+                        "Volume Ratio": con_data["volume_ratio"],
+                    }
+                )
+            else:
+                st.warning(f"Confluence data unavailable: {con_err}")
+
+            agent_data, agent_err = api_get(f"/api/agents/summary/{ticker}")
+            st.markdown("#### Agent Summary")
+            if agent_data:
+                st.info(f"Final Bias: **{agent_data['final_bias']}**")
+                for line in agent_data["rationale"]:
+                    st.markdown(f"- {line}")
+            else:
+                st.warning(f"Agent summary unavailable: {agent_err}")
+
+            backtest_data, backtest_err = api_get(f"/api/backtest/{ticker}?algorithm={algorithm}&days=45")
+            st.markdown("#### Backtesting Snapshot")
+            if backtest_data:
+                st.metric("Model Return", f"{backtest_data['model_return_pct']:.2f}%")
+                st.metric("Buy & Hold", f"{backtest_data['buy_hold_return_pct']:.2f}%")
+                st.caption(f"Trades: {backtest_data['total_trades']}")
+            else:
+                st.warning(f"Backtest unavailable: {backtest_err}")
+
+            st.markdown("#### Watchlist")
+            wl_input = st.text_input("Add ticker to watchlist", value="", key="watchlist_add").upper().strip()
+            if st.button("Add to Watchlist", key="add_watch_btn") and wl_input:
+                _, add_err = api_post(
+                    "/api/user/watchlist",
+                    {"user_id": st.session_state.auth_user or USER_ID, "ticker": wl_input},
+                )
+                if add_err:
+                    st.error(f"Could not save watchlist item: {add_err}")
+                else:
+                    if wl_input not in st.session_state.watchlist:
+                        st.session_state.watchlist.append(wl_input)
+
+            if st.session_state.watchlist:
+                remove_item = st.selectbox("Remove watchlist ticker", [""] + st.session_state.watchlist, key="remove_watch_sel")
+                if st.button("Remove", key="remove_watch_btn") and remove_item:
+                    active_user = st.session_state.auth_user or USER_ID
+                    _, del_err = api_delete(f"/api/user/watchlist/{remove_item}?user_id={active_user}")
+                    if del_err:
+                        st.error(f"Could not remove watchlist item: {del_err}")
+                    else:
+                        st.session_state.watchlist = [w for w in st.session_state.watchlist if w != remove_item]
+
+            st.write(st.session_state.watchlist)
+
+            st.markdown("#### Price Alerts")
+            alert_price = st.number_input("Alert price", min_value=0.0, value=float(current_price), step=0.5)
+            alert_direction = st.selectbox("Condition", ["Above", "Below"], key="alert_dir")
+            if st.button("Set Alert", key="set_alert_btn"):
+                payload = {
+                    "user_id": st.session_state.auth_user or USER_ID,
+                    "ticker": ticker,
+                    "price": float(alert_price),
+                    "direction": alert_direction,
+                }
+                add_alert_data, add_alert_err = api_post("/api/user/alerts", payload)
+                if add_alert_err:
+                    st.error(f"Could not set alert: {add_alert_err}")
+                elif add_alert_data:
+                    st.session_state.alerts.insert(
+                        0,
+                        {
+                            "id": add_alert_data.get("id"),
+                            "ticker": ticker,
+                            "price": float(alert_price),
+                            "direction": alert_direction,
+                        },
+                    )
+
+            active_alerts = [a for a in st.session_state.alerts if a["ticker"] == ticker]
+            for a in active_alerts:
+                hit = current_price >= a["price"] if a["direction"] == "Above" else current_price <= a["price"]
+                if hit:
+                    st.success(f"Alert hit: {ticker} is {a['direction'].lower()} ${a['price']:.2f}")
+                else:
+                    st.caption(f"Waiting: {ticker} {a['direction'].lower()} ${a['price']:.2f}")
+
+            if active_alerts:
+                alert_ids = [a.get("id") for a in active_alerts if a.get("id") is not None]
+                if alert_ids:
+                    remove_alert_id = st.selectbox("Remove alert ID", [0] + alert_ids, key="remove_alert_id")
+                    if st.button("Delete Alert", key="delete_alert_btn") and remove_alert_id:
+                        active_user = st.session_state.auth_user or USER_ID
+                        _, del_alert_err = api_delete(
+                            f"/api/user/alerts/{remove_alert_id}?user_id={active_user}"
+                        )
+                        if del_alert_err:
+                            st.error(f"Could not delete alert: {del_alert_err}")
+                        else:
+                            st.session_state.alerts = [a for a in st.session_state.alerts if a.get("id") != remove_alert_id]
+
+            st.markdown("#### Export Analysis")
+            if con_data:
+                export_df = pd.DataFrame([
+                    {"metric": "ticker", "value": ticker},
+                    {"metric": "current_price", "value": round(current_price, 2)},
+                    {"metric": "signal", "value": con_data["signal"]},
+                    {"metric": "trend_bias", "value": con_data["trend_bias"]},
+                    {"metric": "confluence_score", "value": con_data["confluence"]["score"]},
+                ])
+                st.download_button(
+                    "Download Analysis CSV",
+                    data=export_df.to_csv(index=False),
+                    file_name=f"{ticker}_analysis.csv",
+                    mime="text/csv",
+                    key="download_analysis_btn",
+                )
+
+    # ===== TAB 5: STOCK COMPARISON =====
+    with tab_compare:
+        st.markdown("""
+        <div class="section-header">
+            <div class="icon">⚖️</div>
+            <h3>Relative Performance Comparison</h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+        compare_input = st.text_input(
+            "Compare tickers (comma-separated)",
+            value=f"{ticker},MSFT,GOOGL",
+            help="Example: AAPL,MSFT,NVDA",
+        )
+        if st.button("Run Comparison", key="compare_btn"):
+            cmp_data, cmp_err = api_get(f"/api/compare?tickers={compare_input}&period={period}")
+            if cmp_data:
+                fig_cmp = go.Figure()
+                perf_rows = []
+                for sym, vals in cmp_data["comparison"].items():
+                    if "error" in vals:
+                        continue
+                    fig_cmp.add_trace(
+                        go.Scatter(
+                            x=vals["dates"],
+                            y=vals["normalized"],
+                            mode="lines",
+                            name=sym,
+                        )
+                    )
+                    perf_rows.append({
+                        "Ticker": sym,
+                        "Current Price": vals["current_price"],
+                        "Period Change %": vals["period_change_pct"],
+                    })
+
+                fig_cmp.update_layout(
+                    template="plotly_dark",
+                    title="Normalized Performance (Start = 100)",
+                    yaxis_title="Normalized Value",
+                    xaxis_title="Date",
+                    height=420,
+                )
+                st.plotly_chart(fig_cmp, width="stretch", config={"displayModeBar": False})
+                if perf_rows:
+                    st.dataframe(pd.DataFrame(perf_rows), use_container_width=True, hide_index=True)
+            else:
+                st.error(f"Comparison unavailable: {cmp_err}")
+
+    # ===== TAB 6: MARKET OVERVIEW =====
+    with tab_market:
+        st.markdown("""
+        <div class="section-header">
+            <div class="icon">🌐</div>
+            <h3>Sector Heatmap & Sentiment</h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+        sec_data, sec_err = api_get("/api/sector-heatmap")
+        if sec_data:
+            sectors = sec_data["sectors"]
+            heat_df = pd.DataFrame(
+                [{"Sector": k, "Avg Change %": v["avg_change_pct"]} for k, v in sectors.items()]
+            ).sort_values("Avg Change %", ascending=False)
+            st.dataframe(heat_df, use_container_width=True, hide_index=True)
+        else:
+            st.warning(f"Sector heatmap unavailable: {sec_err}")
+
+        sent_data, sent_err = api_get(f"/api/news-sentiment/{ticker}")
+        if sent_data:
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Sentiment", sent_data["overall_sentiment"])
+            s2.metric("Bullish %", f"{sent_data['bullish_pct']:.1f}%")
+            s3.metric("Bearish %", f"{sent_data['bearish_pct']:.1f}%")
+            st.markdown("#### Headlines")
+            for h in sent_data["headlines"]:
+                st.markdown(f"- **{h['sentiment'].title()}**: {h['title']}")
+        else:
+            st.warning(f"Sentiment unavailable: {sent_err}")
 
         with g3:
             macd_val = float(data["MACD"].iloc[-1])

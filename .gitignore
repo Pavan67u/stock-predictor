@@ -24,6 +24,7 @@ env/
 # ========================
 data/raw/*.csv
 data/processed/*.csv
+data/*.db
 
 # ========================
 # Models (large files — use Git LFS or DVC)

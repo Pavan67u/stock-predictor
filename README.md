@@ -1,6 +1,6 @@
 # 📈 Stock Market Prediction System
 
-A complete end-to-end machine learning system for stock price prediction using LSTM neural networks, with a FastAPI backend and Streamlit dashboard.
+A complete end-to-end machine learning system for stock price prediction using deep learning and classical ML, with a FastAPI backend and Streamlit dashboard.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.15+-orange.svg)
@@ -20,6 +20,19 @@ This project builds a **complete ML pipeline** that:
 4. **Evaluates** models using MSE, RMSE, MAE, and R²
 5. **Serves** predictions through a REST API (FastAPI)
 6. **Visualizes** results in an interactive dashboard (Streamlit)
+7. **Provides** professional trading analysis (multi-timeframe, structure, confluence, risk plan)
+8. **Runs** agent-style decision support for trading rationale
+
+## 🧠 Professional Trading Analysis Features
+
+- Multi-timeframe signals (`15m`, `1h`, `4h`, `1d`) with consensus bias
+- Support/resistance and structure classification (`breakout`, `breakdown`, `range`)
+- Risk-aware trade planning with ATR-based stop, TP1/TP2, and position sizing
+- Confluence scoring (signal + RSI + MACD + trend + volume)
+- Agent summary endpoint combining structure, timeframe, and confluence agents
+- Backtesting engine with model return vs buy-and-hold comparison
+- Stock comparison and sector heatmap modules
+- Sentiment proxy analytics and feature importance insights
 
 ## 📊 Models
 
@@ -127,8 +140,61 @@ docker-compose up --build -d
 | `GET` | `/api/stock/{ticker}` | Historical stock data |
 | `POST` | `/api/predict` | Next-day price prediction |
 | `POST` | `/api/predict/trend` | Multi-day trend forecast |
+| `POST` | `/api/predict/ensemble` | Weighted ensemble prediction with confidence score |
+| `GET` | `/api/backtest/{ticker}` | Backtest strategy performance |
+| `GET` | `/api/compare` | Multi-ticker normalized comparison |
+| `GET` | `/api/sector-heatmap` | Sector performance overview |
+| `GET` | `/api/news-sentiment/{ticker}` | Sentiment proxy and headlines |
+| `GET` | `/api/feature-importance/{ticker}` | Feature contribution snapshot |
+| `GET` | `/api/analysis/multi-timeframe/{ticker}` | Multi-timeframe signal matrix |
+| `GET` | `/api/analysis/structure/{ticker}` | Structure and support/resistance |
+| `POST` | `/api/analysis/plan` | Trade plan + position sizing |
+| `GET` | `/api/analysis/confluence/{ticker}` | Weighted confluence score |
+| `GET` | `/api/agents/summary/{ticker}` | Agent-style final bias + rationale |
+| `POST` | `/api/auth/register` | Register user and return access token |
+| `POST` | `/api/auth/login` | Login user and return access token |
+| `GET` | `/api/auth/me` | Validate bearer token |
+| `GET` | `/api/user/watchlist?user_id=demo` | Get persistent watchlist |
+| `POST` | `/api/user/watchlist` | Add watchlist ticker |
+| `DELETE` | `/api/user/watchlist/{ticker}?user_id=demo` | Remove watchlist ticker |
+| `GET` | `/api/user/alerts?user_id=demo` | Get persistent price alerts |
+| `POST` | `/api/user/alerts` | Add price alert |
+| `DELETE` | `/api/user/alerts/{id}?user_id=demo` | Delete price alert |
 | `GET` | `/api/metrics` | Model evaluation metrics |
 | `GET` | `/api/indicators/{ticker}` | Technical indicators |
+
+## 🤖 Agent Layer Design
+
+The backend includes an agent-style composition endpoint:
+
+- **Timeframe Agent**: evaluates trend and signal by timeframe
+- **Structure Agent**: identifies support/resistance state and market structure
+- **Confluence Agent**: scores setup quality from multiple factors
+- **Summary Agent**: combines agent outputs and emits final trade bias with rationale
+
+This gives an explainable decision layer beyond raw model prediction.
+
+## 💾 Persistent User State
+
+The app now persists watchlist and alerts in SQLite (`data/app_state.db`) through backend APIs.
+
+- Frontend syncs watchlist and alerts at dashboard load.
+- Adding/removing watchlist entries updates both UI and backend state.
+- Adding/removing alerts is persistent and survives app restarts.
+
+## 🔐 Authentication
+
+- Token-based authentication is available via `/api/auth/register` and `/api/auth/login`.
+- Frontend start page now supports register/login flow before dashboard access.
+- User state APIs accept bearer tokens and isolate watchlist/alerts by authenticated user.
+
+## 🧪 CI Pipeline
+
+GitHub Actions workflow at `.github/workflows/ci.yml` runs:
+
+- Dependency install
+- Python syntax compilation checks (`backend/app.py`, `frontend/dashboard.py`)
+- Best-effort test execution (`pytest -q || true`)
 
 ## 🛠️ Tech Stack
 
